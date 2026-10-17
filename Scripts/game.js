@@ -3,7 +3,6 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 let W, H;
-// Переменные для Delta Time (фикс скорости на разных мониторах)
 let lastTime = 0;
 let deltaTime = 1;
 
@@ -119,6 +118,11 @@ const game = {
 
 const playerObj = { x: 0, y: 0, targetX: 0, targetY: 0, radius: 26, speed: 0.18 };
 
+// ================== НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ КУРСОРА ==================
+let tempCursorActive = false; // Ищем ли мы корабль
+let realMouseX = W / 2;       // Реальная позиция мыши X
+let realMouseY = H / 2;       // Реальная позиция мыши Y
+
 // ================== ЗВЁЗДЫ ==================
 function initStars() {
     game.stars = [];
@@ -132,12 +136,40 @@ function initStars() {
 initStars();
 
 // ================== УПРАВЛЕНИЕ ==================
-function handlePointerMove(x, y) { playerObj.targetX = x; playerObj.targetY = y; }
-canvas.addEventListener('mousemove', e => { if (game.state === 'playing') handlePointerMove(e.clientX, e.clientY); });
+function handlePointerMove(x, y) {
+    realMouseX = x;
+    realMouseY = y;
+
+    // Если мы ищем корабль
+    if (tempCursorActive) {
+        // Считаем расстояние от мыши до корабля
+        const dx = x - playerObj.x;
+        const dy = y - playerObj.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 65) {
+            // Мышь налетела на корабль — возвращаем управление!
+            tempCursorActive = false;
+        } else {
+            // Мышь далеко — корабль стоит на месте
+            return;
+        }
+    }
+
+    // Обычное управление
+    playerObj.targetX = x;
+    playerObj.targetY = y;
+}
+
+canvas.addEventListener('mousemove', e => {
+    if (game.state === 'playing') handlePointerMove(e.clientX, e.clientY);
+});
+
 canvas.addEventListener('touchstart', e => {
     e.preventDefault();
     if (game.state === 'playing') handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
 }, { passive: false });
+
 canvas.addEventListener('touchmove', e => {
     e.preventDefault();
     if (game.state === 'playing') handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
@@ -157,9 +189,6 @@ function pauseGame() {
     game.state = 'paused';
     canvas.classList.add('paused');
 
-    // Сохраняем позицию
-    game.savedPlayerPos = { x: playerObj.x, y: playerObj.y };
-
     document.getElementById('pauseLevel').textContent = game.level;
     document.getElementById('pauseLocation').textContent = LOCATIONS[game.locationIndex % LOCATIONS.length].name;
     document.getElementById('pauseWave').textContent = game.wave;
@@ -173,16 +202,11 @@ function resumeGame() {
     game.state = 'playing';
     canvas.classList.remove('paused');
 
-    // Возвращаем позицию
-    if (game.savedPlayerPos) {
-        playerObj.x = game.savedPlayerPos.x;
-        playerObj.y = game.savedPlayerPos.y;
-        playerObj.targetX = game.savedPlayerPos.x;
-        playerObj.targetY = game.savedPlayerPos.y;
-    }
+    // ВКЛЮЧАЕМ ПОИСК КОРАБЛЯ
+    tempCursorActive = true;
 
     document.getElementById('pauseScreen').classList.add('hidden');
-} 
+}
 
 // ================== СКОРОСТЬ ==================
 function getEnemyBaseSpeed() {
@@ -306,9 +330,6 @@ function updateBossBar() {
 function shoot() {
     const w = getWeapon();
     const cd = Math.max(3, w.cooldown - game.upgrades.fireRateBonus);
-    // game.lastShot тоже должен учитывать время, но здесь проще оставить кадры,
-    // так как это влияет только на скорость стрельбы, которая и так зависит от FPS.
-    // Чтобы стрельба не была пулеметной на 144гц, привяжем lastShot к кадрам с учетом dt.
     if (game.frame - game.lastShot < cd) return;
     game.lastShot = game.frame;
 
@@ -429,18 +450,15 @@ function onEnemyKilled(e, index) {
     }
 }
 
-// ================== ОБНОВЛЕНИЕ (С Delta Time) ==================
+// ================== ОБНОВЛЕНИЕ ==================
 function update(dt) {
-    // Счетчик кадров нужен для анимаций (например, мигания), оставляем его
     game.frame += dt;
 
-    // Движение звезд
     for (const star of game.stars) {
         star.y += star.speed * dt;
         if (star.y > H) { star.y = -5; star.x = Math.random() * W; }
     }
 
-    // Движение игрока
     const speedMul = game.speedBoost > 0 ? 0.28 : 0.18;
     playerObj.x += (playerObj.targetX - playerObj.x) * speedMul * dt;
     playerObj.y += (playerObj.targetY - playerObj.y) * speedMul * dt;
@@ -449,7 +467,6 @@ function update(dt) {
 
     shoot();
 
-    // Таймеры способностей
     if (game.shieldTime > 0) game.shieldTime -= dt;
     if (game.freezeTime > 0) game.freezeTime -= dt;
     if (game.speedBoost > 0) game.speedBoost -= dt;
@@ -518,7 +535,6 @@ function update(dt) {
         const e = game.enemies[i];
         e.age += dt;
 
-        // Взрывной враг
         if (e.special === 'exploder') {
             if (e.isExploding) {
                 e.explodeTimer += dt;
@@ -545,7 +561,6 @@ function update(dt) {
             }
         }
 
-        // Стрелок
         if (e.special === 'shootDown' && !e.isExploding) {
             e.shootTimer -= dt;
             if (e.shootTimer <= 0 && e.y > 0 && e.y < H * 0.7) {
@@ -559,7 +574,6 @@ function update(dt) {
                 });
             }
         }
-        // Истребитель
         if (e.special === 'homing' && !e.isExploding) {
             const dx = playerObj.x - e.x, dy = playerObj.y - e.y;
             const d = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -569,7 +583,6 @@ function update(dt) {
             const maxSpd = getEnemyBaseSpeed() + 0.4;
             if (spd > maxSpd) { e.vx = e.vx / spd * maxSpd; e.vy = e.vy / spd * maxSpd; }
         }
-        // Камикадзе
         if (e.special === 'kamikaze' && !e.isExploding) {
             if (e.age > 30) {
                 const dx = playerObj.x - e.x, dy = playerObj.y - e.y;
@@ -592,7 +605,6 @@ function update(dt) {
             e.x = Math.max(e.radius, Math.min(W - e.radius, e.x));
         }
 
-        // === СТОЛКНОВЕНИЕ С ИГРОКОМ ===
         const dx = playerObj.x - e.x, dy = playerObj.y - e.y;
         const collisionDist = playerObj.radius + e.radius;
         if (dx * dx + dy * dy < collisionDist * collisionDist) {
@@ -619,10 +631,8 @@ function update(dt) {
         if (e.y > H + e.radius + 40) game.enemies.splice(i, 1);
     }
 
-    // Босс
     updateBoss(dt);
 
-    // Бафы — притягиваются
     const magnetR = 180 + game.upgrades.magnetRadius * 25;
     for (let i = game.powerups.length - 1; i >= 0; i--) {
         const p = game.powerups[i];
@@ -644,7 +654,6 @@ function update(dt) {
         if (p.y > H + 30) game.powerups.splice(i, 1);
     }
 
-    // Частицы
     for (let i = game.particles.length - 1; i >= 0; i--) {
         const p = game.particles[i];
         p.x += p.vx * dt;
@@ -655,7 +664,6 @@ function update(dt) {
         if (p.life <= 0) game.particles.splice(i, 1);
     }
 
-    // Спавн врагов
     if (!game.boss) {
         game.enemySpawnTimer += dt;
         const waveInLoc = ((game.wave - 1) % 10) + 1;
@@ -674,7 +682,6 @@ function update(dt) {
         }
     }
 
-    // Волны
     game.waveTimer += dt;
     if (game.waveTimer >= 1500 && !game.boss) {
         game.waveTimer = 0;
@@ -731,7 +738,6 @@ function updateBoss(dt) {
 }
 
 function bossAsteroidRain(b, dt) {
-    // Проверка таймера
     if (Math.floor(b.attackTimer / 60) !== Math.floor((b.attackTimer - dt) / 60)) {
         for (let k = 0; k < 3; k++) {
             const loc = LOCATIONS[game.locationIndex % LOCATIONS.length];
@@ -922,9 +928,6 @@ const UPGRADES = [
 function showUpgradeScreen() {
     game.state = 'upgrade';
 
-    // СОХРАНЯЕМ ПОЗИЦИЮ ИГРОКА ПЕРЕД ПАУЗОЙ
-    game.savedPlayerPos = { x: playerObj.x, y: playerObj.y };
-
     document.getElementById('upgradeLevel').textContent = game.level;
     document.getElementById('upgradeWave').textContent = game.wave;
 
@@ -958,16 +961,11 @@ function applyUpgrade(id) {
     game.state = 'playing';
     canvas.classList.remove('paused');
 
-    // ВОЗВРАЩАЕМ ИГРОКА И МЫШЬ НА МЕСТО
-    if (game.savedPlayerPos) {
-        playerObj.x = game.savedPlayerPos.x;
-        playerObj.y = game.savedPlayerPos.y;
-        playerObj.targetX = game.savedPlayerPos.x;
-        playerObj.targetY = game.savedPlayerPos.y;
-    }
+    // ВКЛЮЧАЕМ ПОИСК КОРАБЛЯ
+    tempCursorActive = true;
 
     showToast('УЛУЧШЕНИЕ ПОЛУЧЕНО', 'weapon');
-} 
+}
 
 // ================== ГИПЕРПРЫЖОК ==================
 function travelToNextLocation() {
@@ -1093,6 +1091,33 @@ function draw() {
     ctx.shadowBlur = 0;
 
     drawPlayer();
+
+    // ================== ОТРИСОВКА ПРИЦЕЛА НА СИСТЕМНОЙ МЫШИ ==================
+    if (tempCursorActive) {
+        ctx.save();
+        ctx.translate(realMouseX, realMouseY);
+
+        const pulse = Math.sin(game.frame * 0.2) * 5;
+        ctx.strokeStyle = '#ffaa00'; // Оранжевый
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#ffaa00';
+
+        // Кольцо
+        ctx.beginPath();
+        ctx.arc(0, 0, 25 + pulse, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Перекрестие
+        ctx.beginPath();
+        ctx.moveTo(-12, 0); ctx.lineTo(-5, 0);
+        ctx.moveTo(12, 0); ctx.lineTo(5, 0);
+        ctx.moveTo(0, -12); ctx.lineTo(0, -5);
+        ctx.moveTo(0, 12); ctx.lineTo(0, 5);
+        ctx.stroke();
+
+        ctx.restore();
+    }
 }
 
 function drawEnemy(e) {
@@ -1301,18 +1326,15 @@ function updateHUD() {
     } else mh.style.display = 'none';
 }
 
-// ================== ГЛАВНЫЙ ЦИКЛ (С Delta Time) ==================
+// ================== ГЛАВНЫЙ ЦИКЛ ==================
 function gameLoop(currentTime) {
     if (!lastTime) lastTime = currentTime;
 
-    // Считаем, сколько миллисекунд прошло с прошлого кадра
     let dt = currentTime - lastTime;
     lastTime = currentTime;
 
-    // Ограничитель, чтобы при сворачивании окна игра не "прыгала" вперед
     if (dt > 100) dt = 100;
 
-    // Нормализуем время: 16.667ms = 60 FPS = коэффициент 1
     deltaTime = dt / 16.667;
 
     if (game.state === 'playing') {
@@ -1342,6 +1364,7 @@ function startGame() {
     game.shieldTime = 0; game.freezeTime = 0; game.speedBoost = 0;
     game.multiShotTime = 0; game.multiShotCount = 3;
     game.boss = null; game.isTraveling = false;
+    tempCursorActive = false;
     game.upgrades = {
         bulletSpeed: 0, damageBonus: 0, fireRateBonus: 0,
         extraLives: 0, magnetRadius: 0
@@ -1349,11 +1372,12 @@ function startGame() {
 
     playerObj.x = W / 2; playerObj.y = H - 120;
     playerObj.targetX = W / 2; playerObj.targetY = H - 120;
+    realMouseX = W / 2; realMouseY = H - 120;
 
     canvas.className = LOCATIONS[0].cssClass;
     canvas.classList.remove('paused');
 
-    lastTime = 0; // Сбрасываем таймер при старте
+    lastTime = 0;
 
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('gameOverScreen').classList.add('hidden');
