@@ -1,8 +1,16 @@
 // ================== ИНИЦИАЛИЗАЦИЯ ==================
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+
 let W, H;
-function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+// Переменные для Delta Time (фикс скорости на разных мониторах)
+let lastTime = 0;
+let deltaTime = 1; 
+
+function resize() { 
+    W = canvas.width = window.innerWidth; 
+    H = canvas.height = window.innerHeight; 
+}
 resize();
 window.addEventListener('resize', resize);
 
@@ -157,7 +165,6 @@ function getEnemyBaseSpeed() {
     const waveInLoc = ((game.wave - 1) % 10) + 1;
 
     let speed;
-    // Лёгкий старт: 1 уровень, первые 3 волны — медленнее
     if (game.locationIndex === 0 && waveInLoc <= 3) {
         speed = 0.35 + waveInLoc * 0.06;
     } else {
@@ -174,10 +181,8 @@ function spawnEnemy() {
     const locIdx = game.locationIndex;
     const loc = LOCATIONS[locIdx % LOCATIONS.length];
 
-    // Доступные типы врагов по волне
     let pool = ['asteroid'];
     if (game.locationIndex === 0 && waveInLoc <= 3) {
-        // Лёгкий старт — только астероиды
         pool = ['asteroid'];
     } else {
         if (waveInLoc >= 2) pool.push('asteroid');
@@ -277,6 +282,9 @@ function updateBossBar() {
 function shoot() {
     const w = getWeapon();
     const cd = Math.max(3, w.cooldown - game.upgrades.fireRateBonus);
+    // game.lastShot тоже должен учитывать время, но здесь проще оставить кадры,
+    // так как это влияет только на скорость стрельбы, которая и так зависит от FPS.
+    // Чтобы стрельба не была пулеметной на 144гц, привяжем lastShot к кадрам с учетом dt.
     if (game.frame - game.lastShot < cd) return;
     game.lastShot = game.frame;
 
@@ -397,32 +405,37 @@ function onEnemyKilled(e, index) {
     }
 }
 
-// ================== ОБНОВЛЕНИЕ ==================
-function update() {
-    game.frame++;
+// ================== ОБНОВЛЕНИЕ (С Delta Time) ==================
+function update(dt) {
+    // Счетчик кадров нужен для анимаций (например, мигания), оставляем его
+    game.frame += dt; 
 
+    // Движение звезд
     for (const star of game.stars) {
-        star.y += star.speed;
+        star.y += star.speed * dt;
         if (star.y > H) { star.y = -5; star.x = Math.random()*W; }
     }
 
+    // Движение игрока
     const speedMul = game.speedBoost > 0 ? 0.28 : 0.18;
-    playerObj.x += (playerObj.targetX - playerObj.x) * speedMul;
-    playerObj.y += (playerObj.targetY - playerObj.y) * speedMul;
+    playerObj.x += (playerObj.targetX - playerObj.x) * speedMul * dt;
+    playerObj.y += (playerObj.targetY - playerObj.y) * speedMul * dt;
     playerObj.x = Math.max(30, Math.min(W-30, playerObj.x));
     playerObj.y = Math.max(80, Math.min(H-30, playerObj.y));
 
     shoot();
-    if (game.shieldTime > 0) game.shieldTime--;
-    if (game.freezeTime > 0) game.freezeTime--;
-    if (game.speedBoost > 0) game.speedBoost--;
-    if (game.multiShotTime > 0) game.multiShotTime--;
+
+    // Таймеры способностей
+    if (game.shieldTime > 0) game.shieldTime -= dt;
+    if (game.freezeTime > 0) game.freezeTime -= dt;
+    if (game.speedBoost > 0) game.speedBoost -= dt;
+    if (game.multiShotTime > 0) game.multiShotTime -= dt;
 
     // Пули игрока
     for (let i = game.bullets.length-1; i>=0; i--) {
         const b = game.bullets[i];
-        b.x += b.vx || 0;
-        b.y += b.vy;
+        b.x += (b.vx || 0) * dt;
+        b.y += b.vy * dt;
         if (b.y < -20 || b.x < -30 || b.x > W+30) { game.bullets.splice(i,1); continue; }
 
         let hit = false;
@@ -457,8 +470,8 @@ function update() {
     // Пули врагов
     for (let i = game.enemyBullets.length-1; i>=0; i--) {
         const b = game.enemyBullets[i];
-        b.x += b.vx;
-        b.y += b.vy;
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
         if (b.y > H+20 || b.y < -20 || b.x < -20 || b.x > W+20) {
             game.enemyBullets.splice(i,1); continue;
         }
@@ -479,12 +492,12 @@ function update() {
     const eMul = game.freezeTime > 0 ? 0.3 : 1;
     for (let i = game.enemies.length-1; i>=0; i--) {
         const e = game.enemies[i];
-        e.age++;
+        e.age += dt;
 
         // Взрывной враг
         if (e.special === 'exploder') {
             if (e.isExploding) {
-                e.explodeTimer++;
+                e.explodeTimer += dt;
                 e.radius = 18 + e.explodeTimer * 2;
                 if (e.explodeTimer > 30) {
                     explode(e.x, e.y, e.explosionRadius, 1, '#ff8800');
@@ -494,8 +507,8 @@ function update() {
             } else {
                 const dx = playerObj.x - e.x, dy = playerObj.y - e.y;
                 const d = Math.sqrt(dx*dx + dy*dy) || 1;
-                e.vx += (dx/d) * 0.15;
-                e.vy += (dy/d) * 0.15;
+                e.vx += (dx/d) * 0.15 * dt;
+                e.vy += (dy/d) * 0.15 * dt;
                 const spd = Math.sqrt(e.vx*e.vx + e.vy*e.vy);
                 const maxSpd = getEnemyBaseSpeed() + 0.5;
                 if (spd > maxSpd) { e.vx = e.vx/spd*maxSpd; e.vy = e.vy/spd*maxSpd; }
@@ -510,7 +523,7 @@ function update() {
 
         // Стрелок
         if (e.special === 'shootDown' && !e.isExploding) {
-            e.shootTimer--;
+            e.shootTimer -= dt;
             if (e.shootTimer <= 0 && e.y > 0 && e.y < H*0.7) {
                 e.shootTimer = 80 + Math.random()*40;
                 const dx = playerObj.x - e.x, dy = playerObj.y - e.y;
@@ -526,8 +539,8 @@ function update() {
         if (e.special === 'homing' && !e.isExploding) {
             const dx = playerObj.x - e.x, dy = playerObj.y - e.y;
             const d = Math.sqrt(dx*dx+dy*dy) || 1;
-            e.vx += (dx/d) * 0.1;
-            e.vy += (dy/d) * 0.1;
+            e.vx += (dx/d) * 0.1 * dt;
+            e.vy += (dy/d) * 0.1 * dt;
             const spd = Math.sqrt(e.vx*e.vx + e.vy*e.vy);
             const maxSpd = getEnemyBaseSpeed() + 0.4;
             if (spd > maxSpd) { e.vx = e.vx/spd*maxSpd; e.vy = e.vy/spd*maxSpd; }
@@ -537,8 +550,8 @@ function update() {
             if (e.age > 30) {
                 const dx = playerObj.x - e.x, dy = playerObj.y - e.y;
                 const d = Math.sqrt(dx*dx+dy*dy) || 1;
-                e.vx += (dx/d) * 0.25;
-                e.vy += (dy/d) * 0.25;
+                e.vx += (dx/d) * 0.25 * dt;
+                e.vy += (dy/d) * 0.25 * dt;
                 const spd = Math.sqrt(e.vx*e.vx + e.vy*e.vy);
                 const maxSpd = getEnemyBaseSpeed() + 0.7;
                 if (spd > maxSpd) { e.vx = e.vx/spd*maxSpd; e.vy = e.vy/spd*maxSpd; }
@@ -546,16 +559,16 @@ function update() {
         }
 
         if (!e.isExploding) {
-            e.y += e.vy * eMul;
-            e.x += e.vx * eMul;
+            e.y += e.vy * eMul * dt;
+            e.x += e.vx * eMul * dt;
         }
-        e.angle += e.rotation;
+        e.angle += e.rotation * dt;
         if (e.x < e.radius || e.x > W-e.radius) {
             e.vx *= -1;
             e.x = Math.max(e.radius, Math.min(W-e.radius, e.x));
         }
 
-        // === СТОЛКНОВЕНИЕ С ИГРОКОМ (ИСПРАВЛЕНО) ===
+        // === СТОЛКНОВЕНИЕ С ИГРОКОМ ===
         const dx = playerObj.x - e.x, dy = playerObj.y - e.y;
         const collisionDist = playerObj.radius + e.radius;
         if (dx*dx + dy*dy < collisionDist * collisionDist) {
@@ -583,17 +596,18 @@ function update() {
     }
 
     // Босс
-    updateBoss();
+    updateBoss(dt);
 
     // Бафы — притягиваются
     const magnetR = 180 + game.upgrades.magnetRadius * 25;
     for (let i = game.powerups.length-1; i>=0; i--) {
         const p = game.powerups[i];
-        p.y += p.vy; p.age++;
+        p.y += p.vy * dt; 
+        p.age += dt;
         const dx = playerObj.x - p.x, dy = playerObj.y - p.y;
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (dist < magnetR && dist > 0.1) {
-            const pull = dist < 80 ? 6 : 3;
+            const pull = (dist < 80 ? 6 : 3) * dt;
             p.x += dx/dist * pull;
             p.y += dy/dist * pull;
         }
@@ -609,19 +623,20 @@ function update() {
     // Частицы
     for (let i = game.particles.length-1; i>=0; i--) {
         const p = game.particles[i];
-        p.x += p.vx; p.y += p.vy;
-        p.vx *= 0.96; p.vy *= 0.96;
-        p.life -= 0.02;
+        p.x += p.vx * dt; 
+        p.y += p.vy * dt;
+        p.vx *= Math.pow(0.96, dt);
+        p.vy *= Math.pow(0.96, dt);
+        p.life -= 0.02 * dt;
         if (p.life <= 0) game.particles.splice(i,1);
     }
 
     // Спавн врагов
     if (!game.boss) {
-        game.enemySpawnTimer++;
+        game.enemySpawnTimer += dt;
         const waveInLoc = ((game.wave - 1) % 10) + 1;
 
         let baseRate = game.enemySpawnRate;
-        // Лёгкий старт
         if (game.locationIndex === 0 && waveInLoc <= 3) {
             baseRate = 130 + (3 - waveInLoc) * 30;
         }
@@ -636,7 +651,7 @@ function update() {
     }
 
     // Волны
-    game.waveTimer++;
+    game.waveTimer += dt;
     if (game.waveTimer >= 1500 && !game.boss) {
         game.waveTimer = 0;
         advanceWave();
@@ -646,34 +661,34 @@ function update() {
 }
 
 // ================== АТАКИ БОССОВ ==================
-function updateBoss() {
+function updateBoss(dt) {
     if (!game.boss) return;
     const b = game.boss;
-    b.age++;
-    if (b.blink > 0) b.blink--;
+    b.age += dt;
+    if (b.blink > 0) b.blink -= dt;
 
     if (b.phase === 'entering') {
-        b.y += 1.5;
+        b.y += 1.5 * dt;
         if (b.y >= 130) { b.y = 130; b.phase = 'fighting'; }
         return;
     }
 
-    b.x += b.vx;
+    b.x += b.vx * dt;
     if (b.x < b.radius) { b.x = b.radius; b.vx *= -1; }
     if (b.x > W - b.radius) { b.x = W - b.radius; b.vx *= -1; }
     b.y = 130 + Math.sin(b.age * 0.03) * 25;
-    b.angle += 0.01;
+    b.angle += 0.01 * dt;
 
-    b.attackTimer++;
+    b.attackTimer += dt;
     switch (b.attack) {
-        case 'asteroidRain':  bossAsteroidRain(b); break;
-        case 'cheese':        bossCheese(b); break;
-        case 'fireballs':     bossFireballs(b); break;
-        case 'rings':         bossRings(b); break;
-        case 'teleport':      bossTeleport(b); break;
+        case 'asteroidRain':  bossAsteroidRain(b, dt); break;
+        case 'cheese':        bossCheese(b, dt); break;
+        case 'fireballs':     bossFireballs(b, dt); break;
+        case 'rings':         bossRings(b, dt); break;
+        case 'teleport':      bossTeleport(b, dt); break;
     }
 
-    b.subTimer++;
+    b.subTimer += dt;
     if (b.subTimer > 300 && game.enemies.length < 10) {
         b.subTimer = 0;
         for (let k = 0; k < 2; k++) {
@@ -691,99 +706,103 @@ function updateBoss() {
     }
 }
 
-function bossAsteroidRain(b) {
-    if (b.attackTimer % 60 !== 0) return;
-    for (let k = 0; k < 3; k++) {
-        const loc = LOCATIONS[game.locationIndex % LOCATIONS.length];
-        game.enemies.push({
-            x: b.x + (Math.random()-0.5)*b.radius*3,
-            y: b.y,
-            vx: (Math.random()-0.5)*3, vy: 3 + Math.random()*2,
-            radius: 10 + Math.random()*8,
-            hp: 2, maxHp: 2,
-            type:'asteroid', color: loc.enemyColors[0],
-            angle:0, rotation:0.08, age:0, shootTimer:999,
-            isExploding:false
-        });
+function bossAsteroidRain(b, dt) {
+    // Проверка таймера
+    if (Math.floor(b.attackTimer / 60) !== Math.floor((b.attackTimer - dt) / 60)) {
+        for (let k = 0; k < 3; k++) {
+            const loc = LOCATIONS[game.locationIndex % LOCATIONS.length];
+            game.enemies.push({
+                x: b.x + (Math.random()-0.5)*b.radius*3,
+                y: b.y,
+                vx: (Math.random()-0.5)*3, vy: 3 + Math.random()*2,
+                radius: 10 + Math.random()*8,
+                hp: 2, maxHp: 2,
+                type:'asteroid', color: loc.enemyColors[0],
+                angle:0, rotation:0.08, age:0, shootTimer:999,
+                isExploding:false
+            });
+        }
     }
 }
 
-function bossCheese(b) {
+function bossCheese(b, dt) {
     b.attackPhase = Math.floor(b.age / 300) % 2;
-    if (b.attackTimer % 70 !== 0) return;
+    if (Math.floor(b.attackTimer / 70) !== Math.floor((b.attackTimer - dt) / 70)) {
+        if (b.attackPhase === 0) {
+            const dx = playerObj.x - b.x, dy = playerObj.y - b.y;
+            const d = Math.sqrt(dx*dx+dy*dy) || 1;
+            game.enemyBullets.push({
+                x: b.x, y: b.y,
+                vx: dx/d*3, vy: dy/d*3,
+                radius: 14, color: '#ffdd44', special:'cheese', age:0
+            });
+        } else {
+            for (let k = -2; k <= 2; k++) {
+                game.enemyBullets.push({
+                    x: b.x + k*25, y: b.y,
+                    vx: k*0.6, vy: 4,
+                    radius: 8, color: '#ffee66', special:'cheese', age:0
+                });
+            }
+        }
+    }
+}
 
-    if (b.attackPhase === 0) {
+function bossFireballs(b, dt) {
+    if (Math.floor(b.attackTimer / 50) !== Math.floor((b.attackTimer - dt) / 50)) {
         const dx = playerObj.x - b.x, dy = playerObj.y - b.y;
         const d = Math.sqrt(dx*dx+dy*dy) || 1;
         game.enemyBullets.push({
             x: b.x, y: b.y,
-            vx: dx/d*3, vy: dy/d*3,
-            radius: 14, color: '#ffdd44', special:'cheese', age:0
+            vx: dx/d*3.5, vy: dy/d*3.5,
+            radius: 11, color: '#ff4400', special:'fireball', age:0
         });
-    } else {
-        for (let k = -2; k <= 2; k++) {
-            game.enemyBullets.push({
-                x: b.x + k*25, y: b.y,
-                vx: k*0.6, vy: 4,
-                radius: 8, color: '#ffee66', special:'cheese', age:0
-            });
-        }
     }
 }
 
-function bossFireballs(b) {
-    if (b.attackTimer % 50 !== 0) return;
-    const dx = playerObj.x - b.x, dy = playerObj.y - b.y;
-    const d = Math.sqrt(dx*dx+dy*dy) || 1;
-    game.enemyBullets.push({
-        x: b.x, y: b.y,
-        vx: dx/d*3.5, vy: dy/d*3.5,
-        radius: 11, color: '#ff4400', special:'fireball', age:0
-    });
-}
-
-function bossRings(b) {
+function bossRings(b, dt) {
     b.attackPhase = Math.floor(b.age / 400) % 3;
-    if (b.attackTimer % 80 !== 0) return;
-
-    if (b.attackPhase === 0) {
-        const count = 12;
-        for (let i = 0; i < count; i++) {
-            const a = (i/count) * Math.PI*2 + b.age * 0.02;
-            game.enemyBullets.push({
-                x: b.x, y: b.y,
-                vx: Math.cos(a)*2.5, vy: Math.sin(a)*2.5,
-                radius: 7, color: '#e3c98a', special:'ring', age:0
-            });
-        }
-    } else if (b.attackPhase === 1) {
-        for (let i = 0; i < 3; i++) {
-            const a = (b.age * 0.1) + i * 2.1;
-            game.enemyBullets.push({
-                x: b.x, y: b.y,
-                vx: Math.cos(a)*3.5, vy: Math.sin(a)*3.5,
-                radius: 8, color: '#ffd700', special:'ring', age:0
-            });
-        }
-    } else {
-        for (let k = -2; k <= 2; k++) {
-            game.enemyBullets.push({
-                x: b.x + k*25, y: b.y + 20,
-                vx: k*0.3, vy: 4.5,
-                radius: 6, color: '#ffaa00', special:'ring', age:0
-            });
+    
+    if (Math.floor(b.attackTimer / 80) !== Math.floor((b.attackTimer - dt) / 80)) {
+        if (b.attackPhase === 0) {
+            const count = 12;
+            for (let i = 0; i < count; i++) {
+                const a = (i/count) * Math.PI*2 + b.age * 0.02;
+                game.enemyBullets.push({
+                    x: b.x, y: b.y,
+                    vx: Math.cos(a)*2.5, vy: Math.sin(a)*2.5,
+                    radius: 7, color: '#e3c98a', special:'ring', age:0
+                });
+            }
+        } else if (b.attackPhase === 1) {
+            for (let i = 0; i < 3; i++) {
+                const a = (b.age * 0.1) + i * 2.1;
+                game.enemyBullets.push({
+                    x: b.x, y: b.y,
+                    vx: Math.cos(a)*3.5, vy: Math.sin(a)*3.5,
+                    radius: 8, color: '#ffd700', special:'ring', age:0
+                });
+            }
+        } else {
+            for (let k = -2; k <= 2; k++) {
+                game.enemyBullets.push({
+                    x: b.x + k*25, y: b.y + 20,
+                    vx: k*0.3, vy: 4.5,
+                    radius: 6, color: '#ffaa00', special:'ring', age:0
+                });
+            }
         }
     }
 }
 
-function bossTeleport(b) {
-    if (b.attackTimer % 120 === 0) {
+function bossTeleport(b, dt) {
+    if (Math.floor(b.attackTimer / 120) !== Math.floor((b.attackTimer - dt) / 120)) {
         createParticles(b.x, b.y, b.color, 30);
         b.x = Math.random() * (W - b.radius*2) + b.radius;
         b.y = 100 + Math.random() * 100;
         createParticles(b.x, b.y, b.color, 30);
     }
-    if (b.attackTimer % 40 === 0) {
+    if (Math.floor(b.attackTimer / 40) !== Math.floor((b.attackTimer - dt) / 40)) {
         for (let k = -2; k <= 2; k++) {
             const a = Math.PI/2 + k*0.25;
             game.enemyBullets.push({
@@ -1231,7 +1250,7 @@ function drawPlayer() {
 
 // ================== HUD ==================
 function updateHUD() {
-    document.getElementById('lives').textContent = game.lives;
+    document.getElementById('lives').textContent = Math.floor(game.lives);
     document.getElementById('score').textContent = game.score;
     document.getElementById('wave').textContent = game.wave;
     document.getElementById('weaponLvl').textContent = game.weaponLevel;
@@ -1244,10 +1263,27 @@ function updateHUD() {
     } else mh.style.display = 'none';
 }
 
-// ================== ЦИКЛ ==================
-function gameLoop() {
-    if (game.state === 'playing') { update(); draw(); }
-    else if (game.state === 'paused' || game.state === 'upgrade') { draw(); }
+// ================== ГЛАВНЫЙ ЦИКЛ (С Delta Time) ==================
+function gameLoop(currentTime) {
+    if (!lastTime) lastTime = currentTime;
+    
+    // Считаем, сколько миллисекунд прошло с прошлого кадра
+    let dt = currentTime - lastTime;
+    lastTime = currentTime;
+
+    // Ограничитель, чтобы при сворачивании окна игра не "прыгала" вперед
+    if (dt > 100) dt = 100; 
+
+    // Нормализуем время: 16.667ms = 60 FPS = коэффициент 1
+    deltaTime = dt / 16.667;
+
+    if (game.state === 'playing') { 
+        update(deltaTime); 
+        draw(); 
+    }
+    else if (game.state === 'paused' || game.state === 'upgrade') { 
+        draw(); 
+    }
     requestAnimationFrame(gameLoop);
 }
 
@@ -1278,6 +1314,8 @@ function startGame() {
 
     canvas.className = LOCATIONS[0].cssClass;
     canvas.classList.remove('paused');
+    
+    lastTime = 0; // Сбрасываем таймер при старте
 
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('gameOverScreen').classList.add('hidden');
@@ -1339,5 +1377,5 @@ document.getElementById('restartBtn').addEventListener('click', startGame);
 document.getElementById('startBest').textContent = game.best;
 
 initStars();
-gameLoop();
+requestAnimationFrame(gameLoop);
 setTimeout(loadFromYandex, 1500);
