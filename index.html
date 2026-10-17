@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -7,17 +7,17 @@
     <link rel="stylesheet" href="Content/style.css">
     <link rel="icon" href="data:,">
     <script>
-                if (window.location.hostname.includes('yandex') || window.parent !== window) {
-                    const s = document.createElement('script');
-                    s.src = 'https://yandex.ru/games/sdk/v2';
-                    document.head.appendChild(s);
-                }
+        if (window.location.hostname.includes('yandex') || window.parent !== window) {
+            const s = document.createElement('script');
+            s.src = 'https://yandex.ru/games/sdk/v2';
+            document.head.appendChild(s);
+        }
     </script>
 </head>
 <body>
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
-
+        
         <div id="startScreen" class="screen">
             <h1>Космический защитник</h1>
             <p>Уничтожай врагов, качайся, побеждай боссов!</p>
@@ -30,13 +30,13 @@
             <button id="playBtn" class="btn">ИГРАТЬ</button>
             <div class="best-score">Рекорд: <span id="startBest">0</span></div>
         </div>
-
+        
         <div id="upgradeScreen" class="screen hidden">
             <h2 class="upgrade-title">ВЫБЕРИ УЛУЧШЕНИЕ</h2>
             <p class="upgrade-subtitle">Уровень <span id="upgradeLevel">1</span> · Волна <span id="upgradeWave">5</span></p>
             <div class="upgrade-cards" id="upgradeCards"></div>
         </div>
-
+        
         <div id="travelScreen" class="screen hidden">
             <div class="hyper-container">
                 <div class="hyper-lines" id="hyperLines"></div>
@@ -46,7 +46,7 @@
             <p class="travel-sub" id="travelSub">Пункт назначения...</p>
             <div class="travel-progress"><div class="travel-bar" id="travelBar"></div></div>
         </div>
-
+        
         <div id="pauseScreen" class="screen hidden">
             <h2 class="pause-title">ПАУЗА</h2>
             <p class="pause-hint">Нажми ПРОБЕЛ чтобы продолжить</p>
@@ -58,7 +58,7 @@
                 <p>Пушка: <span id="pauseWeapon">1</span></p>
             </div>
         </div>
-
+        
         <div id="gameOverScreen" class="screen hidden">
             <h2>Игра окончена</h2>
             <div class="score-display">
@@ -70,7 +70,7 @@
             </div>
             <button id="restartBtn" class="btn">ЕЩЁ РАЗ</button>
         </div>
-
+        
         <div id="hud" class="hidden">
             <div class="hud-row">
                 <div class="hud-item">Ур: <span id="hudLevel">1</span></div>
@@ -86,17 +86,17 @@
                 <div class="hud-item" id="multiHud" style="display:none">Мульти: <span id="multiTime">0</span></div>
             </div>
         </div>
-
+        
         <div id="bossBar" class="boss-bar hidden">
             <div class="boss-name" id="bossName">БОСС</div>
             <div class="boss-hp-track">
                 <div class="boss-hp-fill" id="bossHpFill"></div>
             </div>
         </div>
-
+        
         <div id="toast" class="toast hidden"></div>
     </div>
-
+    
     <script src="Scripts/game.js"></script>
 </body>
 </html>
