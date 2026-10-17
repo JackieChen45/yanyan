@@ -213,11 +213,19 @@ function getEnemyBaseSpeed() {
     const waveInLoc = ((game.wave - 1) % 10) + 1;
 
     let speed;
+    // Лёгкий старт: 1 уровень, волны 1-3
     if (game.locationIndex === 0 && waveInLoc <= 3) {
         speed = 0.35 + waveInLoc * 0.06;
-    } else {
+    }
+    // ЧУТОК ПРОЩЕ: 1 уровень, волны 5-9 (после первого улучшения и до босса)
+    else if (game.locationIndex === 0 && waveInLoc >= 5 && waveInLoc <= 9) {
+        speed = 0.65 + waveInLoc * 0.08; // Было 0.7 + waveInLoc * 0.10
+    }
+    // Обычная сложность для остальных случаев
+    else {
         speed = 0.7 + waveInLoc * 0.10 + game.locationIndex * 0.18;
     }
+
     speed += game.upgrades.bulletSpeed * 0.05;
     return Math.min(speed, 2.6);
 }
@@ -669,16 +677,30 @@ function update(dt) {
         const waveInLoc = ((game.wave - 1) % 10) + 1;
 
         let baseRate = game.enemySpawnRate;
+        let extraSpawnChance = 0.5; // Шанс заспавнить 2-го врага подряд
+
+        // Лёгкий старт (волны 1-3)
         if (game.locationIndex === 0 && waveInLoc <= 3) {
             baseRate = 130 + (3 - waveInLoc) * 30;
+            extraSpawnChance = 0;
         }
+        // ЧУТОК ПРОЩЕ: 1 уровень, волны 5-9
+        else if (game.locationIndex === 0 && waveInLoc >= 5 && waveInLoc <= 9) {
+            baseRate = 100; // Фиксированная база (реже спавн)
+            extraSpawnChance = 0.2; // Реже спавним пачками
+        }
+
         const spawnRate = Math.max(20, baseRate - waveInLoc * 4 - game.locationIndex * 3);
 
         if (game.enemySpawnTimer >= spawnRate) {
             game.enemySpawnTimer = 0;
             spawnEnemy();
+
+            // Дополнительный спавн
             const easyStart = game.locationIndex === 0 && waveInLoc <= 3;
-            if (!easyStart && waveInLoc >= 4 && Math.random() < 0.5) spawnEnemy();
+            if (!easyStart && waveInLoc >= 4 && Math.random() < extraSpawnChance) {
+                spawnEnemy();
+            }
         }
     }
 
