@@ -685,10 +685,10 @@ function update(dt) {
             baseRate = 130 + (3 - waveInLoc) * 30;
             extraSpawnChance = 0;
         }
-        // ЧУТЬ СЛОЖНЕЕ: 1 уровень, волны 5-9
+        // Плотнее по врагам: 1 уровень, волны 5-9
         else if (game.locationIndex === 0 && waveInLoc >= 5 && waveInLoc <= 9) {
-            baseRate = 75;
-            extraSpawnChance = 0.45;
+            baseRate = 60;
+            extraSpawnChance = 0.55;
         }
 
         const spawnRate = Math.max(20, baseRate - waveInLoc * 4 - game.locationIndex * 3);
