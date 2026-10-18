@@ -217,9 +217,11 @@ function getEnemyBaseSpeed() {
     if (game.locationIndex === 0 && waveInLoc <= 3) {
         speed = 0.35 + waveInLoc * 0.06;
     }
-    // ЧУТОК ПРОЩЕ: 1 уровень, волны 5-9 (после первого улучшения и до босса)
+    // ЗОЛОТАЯ СЕРЕДИНА: 1 уровень, волны 5-9
     else if (game.locationIndex === 0 && waveInLoc >= 5 && waveInLoc <= 9) {
-        speed = 0.65 + waveInLoc * 0.08; // Было 0.7 + waveInLoc * 0.10
+        // Было 0.65 + waveInLoc * 0.08 (легко), стало 0.7 + waveInLoc * 0.10 (сложно)
+        // Делаем 0.68 + waveInLoc * 0.09
+        speed = 0.68 + waveInLoc * 0.09;
     }
     // Обычная сложность для остальных случаев
     else {
@@ -684,10 +686,10 @@ function update(dt) {
             baseRate = 130 + (3 - waveInLoc) * 30;
             extraSpawnChance = 0;
         }
-        // ЧУТОК ПРОЩЕ: 1 уровень, волны 5-9
+        // ЗОЛОТАЯ СЕРЕДИНА: 1 уровень, волны 5-9
         else if (game.locationIndex === 0 && waveInLoc >= 5 && waveInLoc <= 9) {
-            baseRate = 100; // Фиксированная база (реже спавн)
-            extraSpawnChance = 0.2; // Реже спавним пачками
+            baseRate = 85; // Было 100 (легко) и ~60 (сложно), стало 85
+            extraSpawnChance = 0.35; // Было 0.2 (легко) и 0.5 (сложно), стало 0.35
         }
 
         const spawnRate = Math.max(20, baseRate - waveInLoc * 4 - game.locationIndex * 3);
