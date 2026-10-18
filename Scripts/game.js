@@ -217,11 +217,9 @@ function getEnemyBaseSpeed() {
     if (game.locationIndex === 0 && waveInLoc <= 3) {
         speed = 0.35 + waveInLoc * 0.06;
     }
-    // ЗОЛОТАЯ СЕРЕДИНА: 1 уровень, волны 5-9
+    // ЧУТЬ СЛОЖНЕЕ: 1 уровень, волны 5-9
     else if (game.locationIndex === 0 && waveInLoc >= 5 && waveInLoc <= 9) {
-        // Было 0.65 + waveInLoc * 0.08 (легко), стало 0.7 + waveInLoc * 0.10 (сложно)
-        // Делаем 0.68 + waveInLoc * 0.09
-        speed = 0.68 + waveInLoc * 0.09;
+        speed = 0.70 + waveInLoc * 0.095;
     }
     // Обычная сложность для остальных случаев
     else {
@@ -230,7 +228,8 @@ function getEnemyBaseSpeed() {
 
     speed += game.upgrades.bulletSpeed * 0.05;
     return Math.min(speed, 2.6);
-}
+} 
+
 function getBulletSpeedMul() { return 1 + game.upgrades.bulletSpeed * 0.08; }
 
 // ================== СПАВН ВРАГОВ ==================
@@ -679,17 +678,17 @@ function update(dt) {
         const waveInLoc = ((game.wave - 1) % 10) + 1;
 
         let baseRate = game.enemySpawnRate;
-        let extraSpawnChance = 0.5; // Шанс заспавнить 2-го врага подряд
+        let extraSpawnChance = 0.5;
 
         // Лёгкий старт (волны 1-3)
         if (game.locationIndex === 0 && waveInLoc <= 3) {
             baseRate = 130 + (3 - waveInLoc) * 30;
             extraSpawnChance = 0;
         }
-        // ЗОЛОТАЯ СЕРЕДИНА: 1 уровень, волны 5-9
+        // ЧУТЬ СЛОЖНЕЕ: 1 уровень, волны 5-9
         else if (game.locationIndex === 0 && waveInLoc >= 5 && waveInLoc <= 9) {
-            baseRate = 85; // Было 100 (легко) и ~60 (сложно), стало 85
-            extraSpawnChance = 0.35; // Было 0.2 (легко) и 0.5 (сложно), стало 0.35
+            baseRate = 75;
+            extraSpawnChance = 0.45;
         }
 
         const spawnRate = Math.max(20, baseRate - waveInLoc * 4 - game.locationIndex * 3);
@@ -698,14 +697,12 @@ function update(dt) {
             game.enemySpawnTimer = 0;
             spawnEnemy();
 
-            // Дополнительный спавн
             const easyStart = game.locationIndex === 0 && waveInLoc <= 3;
             if (!easyStart && waveInLoc >= 4 && Math.random() < extraSpawnChance) {
                 spawnEnemy();
             }
         }
     }
-
     game.waveTimer += dt;
     if (game.waveTimer >= 1500 && !game.boss) {
         game.waveTimer = 0;
